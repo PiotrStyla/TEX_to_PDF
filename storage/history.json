@@ -1,0 +1,32 @@
+[
+  {
+    "job_id": "55c6b22f66bd4b959a3d448d11a8e2b9",
+    "mode": "plain",
+    "title": "pes_com_v04_llama32_promptfix_100.tex",
+    "success": true,
+    "has_pdf": true,
+    "has_source_zip": true,
+    "has_log": true,
+    "created_at": "2026-06-25 09:59:15"
+  },
+  {
+    "job_id": "cb6afc9209da4703ae7cac550140b115",
+    "mode": "plain",
+    "title": "sample_tex_project.zip",
+    "success": true,
+    "has_pdf": true,
+    "has_source_zip": true,
+    "has_log": true,
+    "created_at": "2026-06-25 09:10:28"
+  },
+  {
+    "job_id": "4047357082c44f20971060970b8e4ecc",
+    "mode": "plain",
+    "title": "pes_com_v04_llama32_promptfix_100.tex",
+    "success": true,
+    "has_pdf": true,
+    "has_source_zip": true,
+    "has_log": true,
+    "created_at": "2026-06-25 09:07:59"
+  }
+]
