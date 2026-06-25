@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-.env
-storage/jobs/*
-storage/output/*
-storage/logs/*
-!storage/jobs/.gitkeep
-!storage/output/.gitkeep
-!storage/logs/.gitkeep

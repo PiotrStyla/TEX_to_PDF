@@ -1,9 +1,42 @@
+# Python
+.venv/
+venv/
+env/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# Local environment
 .env
+.env.local
+
+# App runtime storage
 storage/jobs/*
 storage/output/*
 storage/logs/*
+
+# Keep storage folders
 !storage/jobs/.gitkeep
 !storage/output/.gitkeep
 !storage/logs/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Nested accidental copy
+tex2pdf-webapp-starter/
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.pdf
