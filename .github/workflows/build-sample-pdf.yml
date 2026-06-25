@@ -1,0 +1,33 @@
+name: Build Sample PDF
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "examples/sample-paper/**"
+      - ".github/workflows/build-sample-pdf.yml"
+
+jobs:
+  build-sample-pdf:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y latexmk texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
+
+      - name: Build PDF
+        working-directory: examples/sample-paper
+        run: |
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -pdflatex="pdflatex -no-shell-escape %O %S" main.tex
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-tex-to-pdf
+          path: examples/sample-paper/main.pdf
+          if-no-files-found: error

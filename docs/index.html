@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TEX to PDF Builder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">Open-source TeX → PDF workflow</p>
+      <h1>TEX to PDF Builder</h1>
+      <p class="lead">
+        Minimalna aplikacja do przekształcania plików <code>.tex</code> i projektów LaTeX <code>.zip</code> w PDF.
+        Lokalnie działa jako FastAPI + Docker + LaTeX, a darmowe demo buduje PDF przez GitHub Actions.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/PiotrStyla/TEX_to_PDF">View on GitHub</a>
+        <a class="button" href="https://github.com/PiotrStyla/TEX_to_PDF/actions">Build PDF with Actions</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Local Web App</h2>
+        <p>Uruchamiasz lokalnie, wrzucasz <code>.tex</code> albo <code>.zip</code> i dostajesz PDF w przeglądarce.</p>
+        <pre><code>uvicorn app.main:app --reload --host 127.0.0.1 --port 8000</code></pre>
+      </article>
+      <article class="card">
+        <h2>Slayer Paper Mode</h2>
+        <p>Formularz generuje strukturę raportu: <code>main.tex</code>, <code>formatka/slayer.sty</code>,
+        <code>tresc/00-strona-tytulowa.tex</code> i <code>tresc/10-tresc.tex</code>.</p>
+      </article>
+      <article class="card">
+        <h2>Free Demo</h2>
+        <p>Bez VPS i bez Rendera: GitHub Actions kompiluje przykładowy projekt LaTeX i publikuje PDF jako artifact.</p>
+        <p>Wejdź w <strong>Actions → Build Sample PDF → Run workflow</strong>.</p>
+      </article>
+      <article class="card">
+        <h2>Roadmap</h2>
+        <ul>
+          <li>GitHub Pages landing page</li>
+          <li>Actions PDF builder</li>
+          <li>backend online na VPS</li>
+          <li>Supabase storage/history/auth</li>
+          <li>Slayer Project deployment</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card wide">
+      <h2>Jak działa darmowy build PDF?</h2>
+      <ol>
+        <li>W repo znajduje się przykładowy projekt w <code>examples/sample-paper/</code>.</li>
+        <li>Workflow GitHub Actions instaluje LaTeX.</li>
+        <li>Uruchamia <code>latexmk</code>.</li>
+        <li>Publikuje <code>main.pdf</code> jako artifact.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

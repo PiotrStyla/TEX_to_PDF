@@ -1,0 +1,18 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{slayer}[2026/06/25 Minimal Slayer paper style]
+
+\RequirePackage{xcolor}
+
+\definecolor{SlayerDark}{HTML}{111827}
+\definecolor{SlayerAccent}{HTML}{2563EB}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+
+\renewcommand{\familydefault}{\sfdefault}
+
+\newcommand{\SlayerRule}{%
+  \vspace{0.5em}%
+  \noindent\textcolor{SlayerAccent}{\rule{\linewidth}{1.2pt}}%
+  \vspace{0.8em}%
+}
