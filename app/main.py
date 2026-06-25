@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from jinja2 import Template
 from pathlib import Path
+from datetime import datetime
+import json
 import re
 import shutil
 import subprocess
@@ -12,18 +14,68 @@ from app.security import (
     extract_zip_safely,
     validate_tex_text,
 )
-from app.templates import INDEX_HTML, RESULT_HTML
+from app.templates import INDEX_HTML, RESULT_HTML, HISTORY_HTML
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 JOBS_DIR = BASE_DIR / "storage" / "jobs"
 OUTPUT_DIR = BASE_DIR / "storage" / "output"
 LOGS_DIR = BASE_DIR / "storage" / "logs"
+HISTORY_PATH = BASE_DIR / "storage" / "history.json"
 
 app = FastAPI(title="TeX to PDF Builder")
 
 
 def render(html: str, **context) -> HTMLResponse:
     return HTMLResponse(Template(html).render(**context))
+
+
+def load_history() -> list[dict]:
+    if not HISTORY_PATH.exists():
+        return []
+
+    try:
+        return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+
+def save_history(history: list[dict]) -> None:
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    HISTORY_PATH.write_text(
+        json.dumps(history, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def record_build(
+    job_id: str,
+    mode: str,
+    title: str,
+    success: bool,
+    has_source_zip: bool,
+) -> None:
+    history = load_history()
+    history.insert(
+        0,
+        {
+            "job_id": job_id,
+            "mode": mode,
+            "title": title or "Untitled",
+            "success": success,
+            "has_pdf": (OUTPUT_DIR / f"{job_id}.pdf").exists(),
+            "has_source_zip": has_source_zip,
+            "has_log": (LOGS_DIR / f"{job_id}.log").exists(),
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    )
+    save_history(history[:50])
+
+
+def get_safe_job_path(base_dir: Path, job_id: str, suffix: str) -> Path:
+    if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job id.")
+
+    return base_dir / f"{job_id}{suffix}"
 
 
 def latex_escape(value: str) -> str:
@@ -97,8 +149,8 @@ def create_slayer_paper(
     tresc/00-strona-tytulowa.tex
     tresc/10-tresc.tex
 
-    Na razie kompilujemy bezpośrednio z katalogu joba, a nazwa paper_name jest zapisana
-    w treści raportu. W kolejnej wersji można dodać export ZIP z papers/<paper_name>/.
+    PDF jest kompilowany z katalogu joba, a ZIP źródeł można pobrać
+    endpointem /download-source/{job_id}.
     """
     safe_paper_name = slugify(paper_name)
     safe_title = latex_escape(title.strip() or "Slayer Paper")
@@ -239,6 +291,53 @@ def find_main_tex(workdir: Path) -> Path:
     raise ValueError("Nie znaleziono main.tex w projekcie.")
 
 
+def make_source_zip(job_id: str, workdir: Path) -> Path:
+    """
+    Tworzy ZIP ze źródłami LaTeX dla danego joba.
+    Pomija pliki pomocnicze LaTeX i wygenerowane PDF-y.
+    """
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    source_zip = OUTPUT_DIR / f"{job_id}-source.zip"
+
+    if source_zip.exists():
+        source_zip.unlink()
+
+    temp_root = workdir.parent / f"{job_id}_source_export"
+
+    if temp_root.exists():
+        shutil.rmtree(temp_root)
+
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    ignored_suffixes = {
+        ".aux",
+        ".log",
+        ".out",
+        ".toc",
+        ".fls",
+        ".fdb_latexmk",
+        ".pdf",
+        ".gz",
+    }
+
+    for path in workdir.rglob("*"):
+        if not path.is_file():
+            continue
+
+        if path.suffix.lower() in ignored_suffixes:
+            continue
+
+        relative = path.relative_to(workdir)
+        target = temp_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+
+    shutil.make_archive(str(source_zip.with_suffix("")), "zip", temp_root)
+    shutil.rmtree(temp_root, ignore_errors=True)
+
+    return source_zip
+
+
 def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
     log_path = LOGS_DIR / f"{job_id}.log"
     output_pdf = OUTPUT_DIR / f"{job_id}.pdf"
@@ -284,6 +383,7 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
 
         if success:
             shutil.copyfile(generated_pdf, output_pdf)
+            make_source_zip(job_id, workdir)
 
         return success, log
 
@@ -337,12 +437,21 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
             raise ValueError("Obsługiwane są tylko pliki .tex oraz .zip.")
 
         success, log = compile_pdf(job_id, workdir, main_tex)
+        has_source_zip = (OUTPUT_DIR / f"{job_id}-source.zip").exists()
+        record_build(
+            job_id=job_id,
+            mode="plain",
+            title=file.filename or "Plain TeX / ZIP",
+            success=success,
+            has_source_zip=has_source_zip,
+        )
 
         return render(
             RESULT_HTML,
             title="Wynik kompilacji",
             success=success,
             job_id=job_id,
+            has_source_zip=has_source_zip,
             log=log[-12000:],
         )
 
@@ -351,11 +460,20 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
         (LOGS_DIR / f"{job_id}.log").write_text(log, encoding="utf-8")
 
+        record_build(
+            job_id=job_id,
+            mode="plain",
+            title=file.filename or "Plain TeX / ZIP",
+            success=False,
+            has_source_zip=False,
+        )
+
         return render(
             RESULT_HTML,
             title="Błąd",
             success=False,
             job_id=job_id,
+            has_source_zip=False,
             log=log,
         )
 
@@ -383,12 +501,21 @@ async def compile_slayer(
         )
 
         success, log = compile_pdf(job_id, workdir, main_tex)
+        has_source_zip = (OUTPUT_DIR / f"{job_id}-source.zip").exists()
+        record_build(
+            job_id=job_id,
+            mode="slayer",
+            title=title,
+            success=success,
+            has_source_zip=has_source_zip,
+        )
 
         return render(
             RESULT_HTML,
             title="Slayer Paper Mode — wynik kompilacji",
             success=success,
             job_id=job_id,
+            has_source_zip=has_source_zip,
             log=log[-12000:],
         )
 
@@ -397,18 +524,32 @@ async def compile_slayer(
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
         (LOGS_DIR / f"{job_id}.log").write_text(log, encoding="utf-8")
 
+        record_build(
+            job_id=job_id,
+            mode="slayer",
+            title=title,
+            success=False,
+            has_source_zip=False,
+        )
+
         return render(
             RESULT_HTML,
             title="Błąd Slayer Paper Mode",
             success=False,
             job_id=job_id,
+            has_source_zip=False,
             log=log,
         )
 
 
+@app.get("/history", response_class=HTMLResponse)
+def history():
+    return render(HISTORY_HTML, builds=load_history())
+
+
 @app.get("/download/{job_id}")
 def download(job_id: str):
-    pdf = OUTPUT_DIR / f"{job_id}.pdf"
+    pdf = get_safe_job_path(OUTPUT_DIR, job_id, ".pdf")
 
     if not pdf.exists():
         raise HTTPException(status_code=404, detail="PDF not found.")
@@ -417,4 +558,32 @@ def download(job_id: str):
         pdf,
         media_type="application/pdf",
         filename="main.pdf",
+    )
+
+
+@app.get("/download-source/{job_id}")
+def download_source(job_id: str):
+    source_zip = get_safe_job_path(OUTPUT_DIR, job_id, "-source.zip")
+
+    if not source_zip.exists():
+        raise HTTPException(status_code=404, detail="Source ZIP not found.")
+
+    return FileResponse(
+        source_zip,
+        media_type="application/zip",
+        filename="tex-source.zip",
+    )
+
+
+@app.get("/download-log/{job_id}")
+def download_log(job_id: str):
+    log = get_safe_job_path(LOGS_DIR, job_id, ".log")
+
+    if not log.exists():
+        raise HTTPException(status_code=404, detail="Log not found.")
+
+    return FileResponse(
+        log,
+        media_type="text/plain",
+        filename="compile.log",
     )

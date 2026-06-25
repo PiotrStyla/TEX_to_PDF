@@ -1,39 +1,26 @@
-# TeX → PDF Web App Starter
+# TeX → PDF Web App
 
-Minimalna aplikacja webowa do workflow:
+MVP aplikacji webowej do kompilacji TEX/LaTeX do PDF.
 
-```text
-upload .tex / .zip → kompilacja LaTeX w Dockerze → PDF preview/download
-```
+## Funkcje
 
-## 1. Wymagania
+- upload `.tex` → PDF
+- upload `.zip` z `main.tex` → PDF
+- Slayer Paper Mode: formularz → projekt LaTeX → PDF
+- download PDF
+- download ZIP źródeł LaTeX
+- download logu kompilacji
+- historia ostatnich 50 buildów pod `/history`
+- kompilacja w Dockerze bez dostępu do sieci
+- `pdflatex -no-shell-escape`
 
-Na Windows:
-
-- Python 3.11+
-- Docker Desktop
-- PowerShell albo terminal w VS Code/Windsurf
-
-## 2. Instalacja
+## Uruchomienie lokalne
 
 ```powershell
-cd tex2pdf-webapp-starter
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-## 3. Zbuduj obraz kompilatora LaTeX
-
-```powershell
 docker build -t tex2pdf-compiler -f compiler/Dockerfile .
-```
-
-Pierwszy build może pobierać duży obraz TeX Live.
-
-## 4. Uruchom web app
-
-```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -43,61 +30,8 @@ Otwórz:
 http://127.0.0.1:8000
 ```
 
-## 5. Testowy plik TEX
-
-Utwórz plik `test.tex`:
-
-```tex
-\documentclass{article}
-\begin{document}
-Hello TeX to PDF.
-\end{document}
-```
-
-Wrzuć go w UI i kliknij **Generate PDF**.
-
-## 6. ZIP projektu LaTeX
-
-ZIP powinien zawierać na górze `main.tex`:
+Historia buildów:
 
 ```text
-project.zip
-├── main.tex
-├── references.bib
-├── formatka/slayer.sty
-└── tresc/10-tresc.tex
+http://127.0.0.1:8000/history
 ```
-
-## 7. Co jest już gotowe
-
-- upload `.tex`
-- upload `.zip`
-- podstawowa walidacja plików
-- sandbox przez Docker
-- `--network none`
-- limit pamięci i CPU
-- timeout kompilacji
-- log błędu kompilacji
-- preview PDF w iframe
-- download `main.pdf`
-
-## 8. Co dodać w następnej wersji
-
-- prawdziwy `Slayer Paper Mode`
-- formularz: tytuł, autor, branch, repo, treść raportu
-- automatyczne generowanie `papers/<paper-name>/`
-- zapisywanie historii buildów
-- publiczny link do PDF
-- API endpoint dla automatyzacji z GitHub/Windsurf
-
-## 9. Ważna uwaga bezpieczeństwa
-
-To jest MVP. Nie wystawiaj publicznie bez dodatkowego hardeningu:
-
-- limit liczby jobów na IP
-- osobny worker do kompilacji
-- okresowe czyszczenie `storage/`
-- krótsze timeouty
-- skanowanie ZIP
-- allowlista komend LaTeX
-- izolacja kontenerów per job
