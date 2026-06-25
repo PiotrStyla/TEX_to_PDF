@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from jinja2 import Template
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import uuid
@@ -25,6 +26,29 @@ def render(html: str, **context) -> HTMLResponse:
     return HTMLResponse(Template(html).render(**context))
 
 
+def latex_escape(value: str) -> str:
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    return "".join(replacements.get(ch, ch) for ch in value)
+
+
+def slugify(value: str, fallback: str = "slayer-paper") -> str:
+    value = value.strip().lower()
+    value = re.sub(r"[^a-z0-9_-]+", "-", value)
+    value = re.sub(r"-+", "-", value).strip("-")
+    return value or fallback
+
+
 def write_plain_tex(upload_path: Path, workdir: Path) -> Path:
     text = upload_path.read_text(encoding="utf-8", errors="ignore")
     validate_tex_text(text)
@@ -35,21 +59,170 @@ def write_plain_tex(upload_path: Path, workdir: Path) -> Path:
     return main_tex
 
 
-def prepare_slayer_mode(workdir: Path) -> None:
-    """
-    Placeholder for Slayer template mode.
+def normalize_slayer_content(content: str) -> str:
+    content = content.strip()
 
-    W v0.1 zakładamy, że upload zawiera gotowy main.tex.
-    W v0.2 dodamy automatyczne składanie struktury:
+    if not content:
+        return r"""
+\section{Wprowadzenie}
 
-    papers/<nazwa>/
-    ├── main.tex
-    ├── formatka/slayer.sty
-    └── tresc/
-        ├── 00-strona-tytulowa.tex
-        └── 10-tresc.tex
+To jest przykładowa treść raportu wygenerowana w trybie Slayer Paper Mode.
+
+\section{Wyniki}
+
+Wklej tutaj swoje wyniki, tabele albo opis eksperymentu.
+""".strip()
+
+    validate_tex_text(content)
+
+    if "\\section" in content or "\\subsection" in content:
+        return content
+
+    return "\\section{Treść raportu}\n\n" + content
+
+
+def create_slayer_paper(
+    workdir: Path,
+    paper_name: str,
+    title: str,
+    subtitle: str,
+    author: str,
+    report_content: str,
+) -> Path:
     """
-    return None
+    Tworzy lokalny projekt LaTeX w strukturze zgodnej z workflow Slayer/PES-CoM:
+
+    main.tex
+    formatka/slayer.sty
+    tresc/00-strona-tytulowa.tex
+    tresc/10-tresc.tex
+
+    Na razie kompilujemy bezpośrednio z katalogu joba, a nazwa paper_name jest zapisana
+    w treści raportu. W kolejnej wersji można dodać export ZIP z papers/<paper_name>/.
+    """
+    safe_paper_name = slugify(paper_name)
+    safe_title = latex_escape(title.strip() or "Slayer Paper")
+    safe_subtitle = latex_escape(subtitle.strip() or "TeX to PDF generated report")
+    safe_author = latex_escape(author.strip() or "Piotr Styła")
+    normalized_content = normalize_slayer_content(report_content)
+
+    formatka_dir = workdir / "formatka"
+    tresc_dir = workdir / "tresc"
+    formatka_dir.mkdir(parents=True, exist_ok=True)
+    tresc_dir.mkdir(parents=True, exist_ok=True)
+
+    main_tex = workdir / "main.tex"
+    slayer_sty = formatka_dir / "slayer.sty"
+    title_tex = tresc_dir / "00-strona-tytulowa.tex"
+    content_tex = tresc_dir / "10-tresc.tex"
+
+    main_tex.write_text(
+        r"""\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{formatka/slayer}
+
+\geometry{margin=2.4cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue
+}
+
+\begin{document}
+
+\input{tresc/00-strona-tytulowa.tex}
+\tableofcontents
+\newpage
+\input{tresc/10-tresc.tex}
+
+\end{document}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    slayer_sty.write_text(
+        r"""\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{slayer}[2026/06/25 Minimal Slayer paper style]
+
+\definecolor{SlayerDark}{HTML}{111827}
+\definecolor{SlayerAccent}{HTML}{2563EB}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+
+\renewcommand{\familydefault}{\sfdefault}
+
+\newcommand{\SlayerRule}{%
+  \vspace{0.5em}%
+  \noindent\textcolor{SlayerAccent}{\rule{\linewidth}{1.2pt}}%
+  \vspace{0.8em}%
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    title_tex.write_text(
+        rf"""% !TEX root = ../main.tex
+
+\begin{{titlepage}}
+\centering
+
+\vspace*{{1.4cm}}
+
+{{\Huge\bfseries {safe_title}\par}}
+
+\vspace{{0.4cm}}
+
+{{\Large {safe_subtitle}\par}}
+
+\vspace{{1.2cm}}
+
+{{\large {safe_author}\par}}
+
+\vspace{{0.4cm}}
+
+{{\large Slayer Paper Mode / TeX to PDF Builder\par}}
+
+\vspace{{1.2cm}}
+
+\SlayerRule
+
+\begin{{center}}
+\begin{{tabular}}{{ll}}
+\toprule
+Project & \texttt{{{latex_escape(safe_paper_name)}}} \\
+Generated by & \texttt{{TEX\_to\_PDF}} \\
+Mode & \texttt{{Slayer Paper Mode}} \\
+\bottomrule
+\end{{tabular}}
+\end{{center}}
+
+\vfill
+
+{{\large \today\par}}
+
+\end{{titlepage}}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    content_tex.write_text(normalized_content + "\n", encoding="utf-8")
+
+    return main_tex
 
 
 def find_main_tex(workdir: Path) -> Path:
@@ -72,19 +245,6 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
 
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    """
-    Kompilacja odbywa się w kontenerze Docker.
-
-    Ważne:
-    - --network none odcina internet w czasie kompilacji,
-    - --memory i --cpus ograniczają zasoby,
-    - -no-shell-escape blokuje uruchamianie komend systemowych przez LaTeX.
-
-    Poprawka:
-    wcześniejsza opcja -shell-escape- była błędna dla latexmk.
-    Teraz przekazujemy bezpieczną komendę pdflatex przez -pdflatex.
-    """
 
     cmd = [
         "docker",
@@ -120,7 +280,6 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
         log_path.write_text(log, encoding="utf-8")
 
         generated_pdf = workdir / main_tex.with_suffix(".pdf").name
-
         success = proc.returncode == 0 and generated_pdf.exists()
 
         if success:
@@ -166,11 +325,6 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
 
             main_tex = find_main_tex(workdir)
 
-            """
-            W v0.1 latexmk uruchamiamy w katalogu workdir,
-            dlatego jeśli main.tex był głębiej w ZIP-ie, kopiujemy go do root.
-            W późniejszej wersji poprawimy to tak, żeby zachowywać pełną strukturę projektu.
-            """
             if main_tex.parent != workdir:
                 shutil.copyfile(main_tex, workdir / "main.tex")
                 main_tex = workdir / "main.tex"
@@ -181,9 +335,6 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
 
         else:
             raise ValueError("Obsługiwane są tylko pliki .tex oraz .zip.")
-
-        if mode == "slayer":
-            prepare_slayer_mode(workdir)
 
         success, log = compile_pdf(job_id, workdir, main_tex)
 
@@ -203,6 +354,52 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
         return render(
             RESULT_HTML,
             title="Błąd",
+            success=False,
+            job_id=job_id,
+            log=log,
+        )
+
+
+@app.post("/compile-slayer", response_class=HTMLResponse)
+async def compile_slayer(
+    paper_name: str = Form("slayer-paper"),
+    title: str = Form("Slayer Paper"),
+    subtitle: str = Form("Generated report"),
+    author: str = Form("Piotr Styła"),
+    report_content: str = Form(""),
+):
+    job_id = uuid.uuid4().hex
+    workdir = JOBS_DIR / job_id
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        main_tex = create_slayer_paper(
+            workdir=workdir,
+            paper_name=paper_name,
+            title=title,
+            subtitle=subtitle,
+            author=author,
+            report_content=report_content,
+        )
+
+        success, log = compile_pdf(job_id, workdir, main_tex)
+
+        return render(
+            RESULT_HTML,
+            title="Slayer Paper Mode — wynik kompilacji",
+            success=success,
+            job_id=job_id,
+            log=log[-12000:],
+        )
+
+    except Exception as exc:
+        log = str(exc)
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        (LOGS_DIR / f"{job_id}.log").write_text(log, encoding="utf-8")
+
+        return render(
+            RESULT_HTML,
+            title="Błąd Slayer Paper Mode",
             success=False,
             job_id=job_id,
             log=log,
