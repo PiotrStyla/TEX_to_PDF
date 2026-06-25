@@ -1,0 +1,27 @@
+services:
+  tex2pdf-app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: tex2pdf-app
+    ports:
+      - "8000:8000"
+    environment:
+      TEX2PDF_STORAGE_DIR: /app/storage
+      TEX2PDF_HOST_STORAGE_DIR: ${PWD}/storage
+      TEX2PDF_COMPILER_IMAGE: tex2pdf-compiler
+      TEX2PDF_DOCKER_MEMORY: 768m
+      TEX2PDF_DOCKER_CPUS: "1"
+    volumes:
+      - ./storage:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - tex2pdf-compiler-builder
+    restart: unless-stopped
+
+  tex2pdf-compiler-builder:
+    build:
+      context: .
+      dockerfile: compiler/Dockerfile
+    image: tex2pdf-compiler
+    command: ["true"]

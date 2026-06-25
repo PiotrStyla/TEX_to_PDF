@@ -4,6 +4,7 @@ from jinja2 import Template
 from pathlib import Path
 from datetime import datetime
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -17,10 +18,13 @@ from app.security import (
 from app.templates import INDEX_HTML, RESULT_HTML, HISTORY_HTML
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-JOBS_DIR = BASE_DIR / "storage" / "jobs"
-OUTPUT_DIR = BASE_DIR / "storage" / "output"
-LOGS_DIR = BASE_DIR / "storage" / "logs"
-HISTORY_PATH = BASE_DIR / "storage" / "history.json"
+STORAGE_DIR = Path(os.getenv("TEX2PDF_STORAGE_DIR", BASE_DIR / "storage")).resolve()
+HOST_STORAGE_DIR = os.getenv("TEX2PDF_HOST_STORAGE_DIR")
+
+JOBS_DIR = STORAGE_DIR / "jobs"
+OUTPUT_DIR = STORAGE_DIR / "output"
+LOGS_DIR = STORAGE_DIR / "logs"
+HISTORY_PATH = STORAGE_DIR / "history.json"
 
 app = FastAPI(title="TeX to PDF Builder")
 
@@ -338,12 +342,30 @@ def make_source_zip(job_id: str, workdir: Path) -> Path:
     return source_zip
 
 
+def docker_workdir_for_job(job_id: str, workdir: Path) -> str:
+    """
+    Zwraca ścieżkę, którą ma zobaczyć Docker daemon.
+
+    Lokalnie na Windows/Linux zwykle wystarczy realna ścieżka workdir.
+    W deployu docker-compose aplikacja działa w kontenerze, ale Docker daemon
+    działa na hoście, dlatego trzeba podać hostową ścieżkę storage przez:
+
+    TEX2PDF_HOST_STORAGE_DIR=/opt/tex2pdf/storage
+    """
+    if HOST_STORAGE_DIR:
+        return str(Path(HOST_STORAGE_DIR) / "jobs" / job_id)
+
+    return str(workdir)
+
+
 def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
     log_path = LOGS_DIR / f"{job_id}.log"
     output_pdf = OUTPUT_DIR / f"{job_id}.pdf"
 
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    docker_workdir = docker_workdir_for_job(job_id, workdir)
 
     cmd = [
         "docker",
@@ -352,12 +374,12 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
         "--network",
         "none",
         "--memory",
-        "768m",
+        os.getenv("TEX2PDF_DOCKER_MEMORY", "768m"),
         "--cpus",
-        "1",
+        os.getenv("TEX2PDF_DOCKER_CPUS", "1"),
         "-v",
-        f"{workdir}:/work",
-        "tex2pdf-compiler",
+        f"{docker_workdir}:/work",
+        os.getenv("TEX2PDF_COMPILER_IMAGE", "tex2pdf-compiler"),
         "latexmk",
         "-pdf",
         "-interaction=nonstopmode",
@@ -396,6 +418,11 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
         log = "Docker nie jest dostępny. Uruchom Docker Desktop albo zmień backend kompilacji."
         log_path.write_text(log, encoding="utf-8")
         return False, log
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "app": "tex2pdf", "storage": str(STORAGE_DIR)}
 
 
 @app.get("/", response_class=HTMLResponse)
