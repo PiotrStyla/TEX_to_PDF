@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: tex-to-pdf
+    runtime: docker
+    plan: hobby
+    dockerfilePath: ./app/Dockerfile.render
+    healthCheckPath: /health
+    envVars:
+      - key: TEX2PDF_COMPILER_MODE
+        value: local
+      - key: TEX2PDF_STORAGE_DIR
+        value: /app/storage
+      - key: TEX2PDF_COMPILE_TIMEOUT
+        value: "90"

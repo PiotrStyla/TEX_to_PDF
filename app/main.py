@@ -358,16 +358,34 @@ def docker_workdir_for_job(job_id: str, workdir: Path) -> str:
     return str(workdir)
 
 
-def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
-    log_path = LOGS_DIR / f"{job_id}.log"
-    output_pdf = OUTPUT_DIR / f"{job_id}.pdf"
+def build_compile_command(job_id: str, workdir: Path, main_tex: Path) -> list[str]:
+    """
+    Zwraca komendę kompilacji.
 
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    Tryby:
+    - docker: lokalny Windows/VPS z Docker daemonem, stary bezpieczniejszy sandbox
+    - local: Render / pojedynczy kontener, gdzie latexmk jest zainstalowany w obrazie aplikacji
+
+    Na Render nie zakładamy dostępu do Docker daemon wewnątrz kontenera, dlatego używamy
+    TEX2PDF_COMPILER_MODE=local.
+    """
+    compiler_mode = os.getenv("TEX2PDF_COMPILER_MODE", "docker").lower().strip()
+
+    latexmk_args = [
+        "latexmk",
+        "-pdf",
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        "-pdflatex=pdflatex -no-shell-escape %O %S",
+        main_tex.name,
+    ]
+
+    if compiler_mode == "local":
+        return latexmk_args
 
     docker_workdir = docker_workdir_for_job(job_id, workdir)
 
-    cmd = [
+    return [
         "docker",
         "run",
         "--rm",
@@ -380,13 +398,18 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
         "-v",
         f"{docker_workdir}:/work",
         os.getenv("TEX2PDF_COMPILER_IMAGE", "tex2pdf-compiler"),
-        "latexmk",
-        "-pdf",
-        "-interaction=nonstopmode",
-        "-halt-on-error",
-        "-pdflatex=pdflatex -no-shell-escape %O %S",
-        main_tex.name,
+        *latexmk_args,
     ]
+
+
+def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
+    log_path = LOGS_DIR / f"{job_id}.log"
+    output_pdf = OUTPUT_DIR / f"{job_id}.pdf"
+
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    cmd = build_compile_command(job_id, workdir, main_tex)
 
     try:
         proc = subprocess.run(
@@ -394,10 +417,11 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
             cwd=workdir,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=int(os.getenv("TEX2PDF_COMPILE_TIMEOUT", "60")),
         )
 
-        log = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        command_log = "Command: " + " ".join(cmd) + "\n\n"
+        log = command_log + (proc.stdout or "") + "\n" + (proc.stderr or "")
         log_path.write_text(log, encoding="utf-8")
 
         generated_pdf = workdir / main_tex.with_suffix(".pdf").name
@@ -410,12 +434,18 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
         return success, log
 
     except subprocess.TimeoutExpired:
-        log = "Compilation timeout after 60 seconds."
+        log = f"Compilation timeout after {os.getenv('TEX2PDF_COMPILE_TIMEOUT', '60')} seconds."
         log_path.write_text(log, encoding="utf-8")
         return False, log
 
-    except FileNotFoundError:
-        log = "Docker nie jest dostępny. Uruchom Docker Desktop albo zmień backend kompilacji."
+    except FileNotFoundError as exc:
+        compiler_mode = os.getenv("TEX2PDF_COMPILER_MODE", "docker")
+        log = (
+            f"Compiler command not found in mode '{compiler_mode}'.\n"
+            f"Details: {exc}\n"
+            "Local Windows: uruchom Docker Desktop i użyj TEX2PDF_COMPILER_MODE=docker.\n"
+            "Render: użyj app/Dockerfile.render i TEX2PDF_COMPILER_MODE=local."
+        )
         log_path.write_text(log, encoding="utf-8")
         return False, log
 
