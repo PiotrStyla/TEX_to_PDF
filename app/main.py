@@ -465,6 +465,8 @@ def compile_pdf(job_id: str, workdir: Path, main_tex: Path) -> tuple[bool, str]:
             cwd=workdir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="ignore",
             timeout=int(os.getenv("TEX2PDF_COMPILE_TIMEOUT", "60")),
         )
 
