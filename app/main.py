@@ -175,31 +175,11 @@ def create_slayer_paper(
     main_tex.write_text(
         r"""\documentclass[11pt,a4paper]{article}
 
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage{geometry}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{longtable}
-\usepackage{hyperref}
-\usepackage{enumitem}
-\usepackage{graphicx}
-\usepackage{xcolor}
 \usepackage{formatka/slayer}
-
-\geometry{margin=2.4cm}
-\hypersetup{
-    colorlinks=true,
-    linkcolor=black,
-    urlcolor=blue
-}
 
 \begin{document}
 
 \input{tresc/00-strona-tytulowa.tex}
-\tableofcontents
-\newpage
 \input{tresc/10-tresc.tex}
 
 \end{document}
@@ -210,19 +190,92 @@ def create_slayer_paper(
 
     slayer_sty.write_text(
         r"""\NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{slayer}[2026/06/25 Minimal Slayer paper style]
+\ProvidesPackage{formatka/slayer}[2026/06/26 Slayer — web paper style]
 
-\definecolor{SlayerDark}{HTML}{111827}
-\definecolor{SlayerAccent}{HTML}{2563EB}
+% --- Język / kodowanie ---
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[polish]{babel}
+\usepackage{lmodern}
 
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0.7em}
+% --- Układ strony ---
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{parskip}
 
-\renewcommand{\familydefault}{\sfdefault}
+% --- Kolory (paleta Slayer) ---
+\usepackage{xcolor}
+\definecolor{slayerblue}{RGB}{15, 76, 129}
+\definecolor{slayercyan}{RGB}{0, 169, 224}
+\definecolor{slayerdark}{RGB}{34, 40, 49}
+\definecolor{slayergray}{RGB}{245, 245, 245}
+\definecolor{slayergreen}{RGB}{46, 125, 50}
+\definecolor{slayeramber}{RGB}{245, 124, 0}
+
+% --- Nagłówki kolorowe ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{slayerblue}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{slayerdark}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{slayerdark}}
+  {\thesubsubsection}{1em}{}
+
+% --- Matematyka ---
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+
+% --- Tabele / grafika / wykresy ---
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% --- Podpisy rysunków/tabel ---
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+% --- Linki ---
+\usepackage[hidelinks]{hyperref}
+\hypersetup{colorlinks=true, linkcolor=slayerblue, urlcolor=slayercyan}
+
+% --- Box na centralny wniosek ---
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+\newenvironment{slayerinsight}{%
+  \begin{center}
+  \begin{tcolorbox}[
+    width=0.92\textwidth,
+    colback=slayergray,
+    colframe=slayerblue,
+    boxrule=1.2pt,
+    arc=4pt,
+    left=10pt, right=10pt, top=10pt, bottom=10pt,
+    fontupper=\small,
+    title={\textbf{Centralny wniosek}},
+    coltitle=white,
+    colbacktitle=slayerblue,
+    fonttitle=\small\bfseries,
+    coltext=slayerdark
+  ]
+  \centering
+}{%
+  \end{tcolorbox}
+  \end{center}
+}
+
+% --- Pomocnik strony tytułowej ---
+\newcommand{\slayertitle}[3]{%
+  {\color{slayerblue}\LARGE\bfseries #1\par}\vspace{0.4cm}%
+  {\large #2\par}{\small #3\par}%
+}
 
 \newcommand{\SlayerRule}{%
   \vspace{0.5em}%
-  \noindent\textcolor{SlayerAccent}{\rule{\linewidth}{1.2pt}}%
+  \noindent\textcolor{slayercyan}{\rule{\linewidth}{1.2pt}}%
   \vspace{0.8em}%
 }
 """.strip()
@@ -236,23 +289,18 @@ def create_slayer_paper(
 \begin{{titlepage}}
 \centering
 
-\vspace*{{1.4cm}}
+\vspace*{{0.8cm}}
 
-{{\Huge\bfseries {safe_title}\par}}
-
-\vspace{{0.4cm}}
-
-{{\Large {safe_subtitle}\par}}
-
-\vspace{{1.2cm}}
-
-{{\large {safe_author}\par}}
+\slayertitle
+  {{{safe_title}}}
+  {{{safe_author}}}
+  {{\today}}
 
 \vspace{{0.4cm}}
 
-{{\large Slayer Paper Mode / TeX to PDF Builder\par}}
+{{\large \textcolor{{slayerdark}}{{{safe_subtitle}}}\par}}
 
-\vspace{{1.2cm}}
+\vspace{{1.0cm}}
 
 \SlayerRule
 
@@ -268,7 +316,7 @@ Mode & \texttt{{Slayer Paper Mode}} \\
 
 \vfill
 
-{{\large \today\par}}
+{{\small PiotrStyla \quad Slayer Paper Mode \quad TeX to PDF Builder \quad \today\par}}
 
 \end{{titlepage}}
 """.strip()

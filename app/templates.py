@@ -204,7 +204,10 @@ Bielik 11B Q4 & 59.00\% & 37.50\% \\
 
 \section{Wniosek}
 
-Answer change nie jest tym samym co useful belief revision.</textarea>
+\begin{slayerinsight}
+Answer change nie jest tym samym co useful belief revision.
+To jest przykład ramki \"Centralny wniosek\".
+\end{slayerinsight}</textarea>
 
           <p class="hint">Po sukcesie pobierzesz zarówno PDF, jak i ZIP źródeł LaTeX.</p>
 
