@@ -531,8 +531,17 @@ async def compile_upload(file: UploadFile = File(...), mode: str = Form("plain")
             main_tex = find_main_tex(workdir)
 
             if main_tex.parent != workdir:
-                shutil.copyfile(main_tex, workdir / "main.tex")
-                main_tex = workdir / "main.tex"
+                # Jeśli ZIP ma główny folder (np. pes-com-v04-promptfix/),
+                # przenieśmy całą zawartość tego folderu do roota joba,
+                # żeby ścieżki względne (formatka/slayer, tresc/...) działały.
+                project_dir = main_tex.parent
+                for path in project_dir.rglob("*"):
+                    if path.is_file():
+                        relative = path.relative_to(project_dir)
+                        target = workdir / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(path, target)
+                main_tex = workdir / main_tex.name
 
         elif suffix == ".tex":
             main_tex = write_plain_tex(upload_path, workdir)
